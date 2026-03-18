@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace Schaumamal.Models.Platform;
 
 public abstract class PlatformInformationProvider
@@ -11,9 +9,9 @@ public abstract class PlatformInformationProvider
 
     public static PlatformInformationProvider Current()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return new WindowsInformationProvider();
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return new MacosInformationProvider();
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return new LinuxInformationProvider();
+        if (OperatingSystem.IsWindows()) return new WindowsInformationProvider();
+        if (OperatingSystem.IsMacOS()) return new MacosInformationProvider();
+        if (OperatingSystem.IsLinux()) return new LinuxInformationProvider();
         throw new PlatformNotSupportedException();
     }
 }
