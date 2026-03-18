@@ -11,6 +11,13 @@
     <Description>The second coming of UiAutomatorViewer.</Description>
     <Copyright>Copyright (c) 2024 Alexandru-Vlad Vamoș</Copyright>
     <PublishAot>true</PublishAot>
+    <TrimMode>full</TrimMode>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <StaticExecutable>true</StaticExecutable>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Avalonia">
+    <AvaloniaUseCompiledBindingsByDefault>True</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +31,20 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
     <PackageReference Include="Semver" Version="3.0.0" />
     <PackageReference Include="System.Reactive" Version="6.1.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+    <PackageReference Include="2ndLAB.SkiaSharp.Static" Version="2.88.9-10.0.26100.0-1.1c7d845" />
+    <PackageReference Include="2ndLAB.ANGLE.Static" Version="7151.0.0-10.0.26100.0-1.79e529b"/>
+    <DirectPInvoke Include="libHarfBuzzSharp"/>
+    <DirectPInvoke Include="libSkiaSharp"/>
+    <DirectPInvoke Include="av_libglesv2"/>
+    <LinkerArg Include="d3d9.lib;dxguid.lib"/>
+    <LinkerArg Include="dxgi.lib"/>
+    <LinkerArg Include="Gdi32.lib;User32.lib"/>
+    <LinkerArg Include="synchronization.lib"/>
+    <LinkerArg Include="fontsub.lib;Ole32.lib;USP10.lib"/>
+    <LinkerArg Include="d3d12.lib;d3dcompiler.lib"/>
   </ItemGroup>
 
   <ItemGroup>
