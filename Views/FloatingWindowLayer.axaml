@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Schaumamal.ViewModels"
+             x:Class="Schaumamal.Views.FloatingWindowLayer"
+             x:DataType="vm:AppViewModel">
+    <Panel x:Name="Overlay" IsVisible="False">
+        <!-- Backdrop -->
+        <Border Background="#B3000000" PointerPressed="OnBackdropPressed" />
+
+        <!-- Card -->
+        <Border Width="400" MaxHeight="500" HorizontalAlignment="Center" VerticalAlignment="Center"
+                CornerRadius="30" Background="#1E2024" BorderBrush="#1FFFFFFF" BorderThickness="1"
+                ClipToBounds="True" PointerPressed="OnCardPressed">
+            <DockPanel>
+                <!-- Header -->
+                <Panel DockPanel.Dock="Top" Margin="10">
+                    <Button Width="30" Height="30" CornerRadius="15" Background="#1E2024"
+                            HorizontalAlignment="Left" Click="OnCloseClicked"
+                            Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                        <TextBlock Text="&#x2715;" Foreground="#B4B7C2" FontSize="14" />
+                    </Button>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="Dump History" Foreground="#B4B7C2" FontSize="17" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="Oldest dumps are replaced first." Foreground="#71727B" FontSize="12"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Panel>
+
+                <!-- Separator -->
+                <Border DockPanel.Dock="Top" Height="1" Margin="20,0">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                            <GradientStop Color="Transparent" Offset="0" />
+                            <GradientStop Color="#1FFFFFFF" Offset="0.5" />
+                            <GradientStop Color="Transparent" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+
+                <!-- Dump list -->
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="HistoryList" Margin="10" />
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+    </Panel>
+</UserControl>

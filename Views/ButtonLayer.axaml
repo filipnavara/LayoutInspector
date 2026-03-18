@@ -1,0 +1,67 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Schaumamal.ViewModels"
+             x:Class="Schaumamal.Views.ButtonLayer"
+             x:DataType="vm:AppViewModel">
+    <StackPanel Spacing="10">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+            <!-- Extraction Pill -->
+            <Border CornerRadius="20" Background="#1E2024">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <!-- Extract Button -->
+                    <Button x:Name="ExtractButton" Width="40" Height="40" CornerRadius="20"
+                            Padding="0" Background="#BA1A1A" Click="OnExtractButtonClicked">
+                        <TextBlock Text="&#x25CF;" Foreground="#3D0808" FontSize="20"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Button>
+
+                    <!-- Info panel -->
+                    <Panel MinWidth="80">
+                        <TextBlock x:Name="SuggestionText" Text="Smash the button."
+                                   Foreground="#71727B" VerticalAlignment="Center" Margin="0,0,15,0" />
+                        <StackPanel x:Name="CurrentDumpPanel" Orientation="Horizontal" IsVisible="False">
+                            <TextBlock Text="Current:" Foreground="#71727B" VerticalAlignment="Center" />
+                            <TextBlock x:Name="CurrentDumpText" Margin="10,0,15,0"
+                                       Foreground="#B4B7C2" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Grid x:Name="ProgressPanel" IsVisible="False" Width="300" Height="40">
+                            <ProgressBar x:Name="DumpProgressBar" Minimum="0" Maximum="1"
+                                         Foreground="#006622" Background="#33006622"
+                                         Height="30" CornerRadius="15" />
+                            <TextBlock x:Name="ProgressText" Foreground="#B4B7C2"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
+                    </Panel>
+                </StackPanel>
+            </Border>
+
+            <!-- History Button -->
+            <Button Width="40" Height="40" CornerRadius="20" Background="#1E2024"
+                    Padding="8" Click="OnHistoryButtonClicked">
+                <TextBlock Text="&#x29D6;" Foreground="#B4B7C2" FontSize="16"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Button>
+
+            <!-- Display Control -->
+            <Border x:Name="DisplayControlPill" CornerRadius="20" Background="#1E2024" IsVisible="False">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <Button Width="40" Height="40" CornerRadius="20" Background="#1E2024"
+                            Padding="8" Click="OnPreviousDisplayClicked">
+                        <TextBlock Text="&#x25C0;" Foreground="#B4B7C2" FontSize="12"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Button>
+                    <TextBlock Text="Display" Foreground="#B4B7C2" VerticalAlignment="Center" />
+                    <Border CornerRadius="12" Background="#B4B7C2" Padding="8,2" VerticalAlignment="Center">
+                        <TextBlock x:Name="DisplayCounterText" Foreground="#1E2024"
+                                   FontWeight="Bold" VerticalAlignment="Center" />
+                    </Border>
+                    <Button Width="40" Height="40" CornerRadius="20" Background="#1E2024"
+                            Padding="8" Click="OnNextDisplayClicked">
+                        <TextBlock Text="&#x25B6;" Foreground="#B4B7C2" FontSize="12"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Button>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </StackPanel>
+</UserControl>
