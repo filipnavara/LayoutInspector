@@ -9,7 +9,7 @@ public class AppRepository
     public string AppDirectoryPath { get; }
     private readonly string _contentJsonFilePath;
     private readonly string _settingsFilePath;
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly AppRepositoryJsonContext JsonContext = AppRepositoryJsonContext.Default;
 
     public AppRepository(PlatformInformationProvider platformInformationProvider)
     {
@@ -19,11 +19,11 @@ public class AppRepository
     }
 
     public bool ExistsContentJson() => File.Exists(_contentJsonFilePath);
-    public Content ReadContentJson() => JsonSerializer.Deserialize<Content>(File.ReadAllText(_contentJsonFilePath), JsonOptions)!;
-    public void WriteContentJson(Content content) => File.WriteAllText(_contentJsonFilePath, JsonSerializer.Serialize(content, JsonOptions));
+    public Content ReadContentJson() => JsonSerializer.Deserialize(File.ReadAllText(_contentJsonFilePath), JsonContext.Content)!;
+    public void WriteContentJson(Content content) => File.WriteAllText(_contentJsonFilePath, JsonSerializer.Serialize(content, JsonContext.Content));
     public bool ExistsSettingsJson() => File.Exists(_settingsFilePath);
-    public Settings ReadSettingsJson() => JsonSerializer.Deserialize<Settings>(File.ReadAllText(_settingsFilePath), JsonOptions)!;
-    public void WriteSettingsJson(Settings settings) => File.WriteAllText(_settingsFilePath, JsonSerializer.Serialize(settings, JsonOptions));
+    public Settings ReadSettingsJson() => JsonSerializer.Deserialize(File.ReadAllText(_settingsFilePath), JsonContext.Settings)!;
+    public void WriteSettingsJson(Settings settings) => File.WriteAllText(_settingsFilePath, JsonSerializer.Serialize(settings, JsonContext.Settings));
     public void CreateAppDirectory() => Directory.CreateDirectory(AppDirectoryPath);
 
     public void CreateContentDirectories(Content content)
