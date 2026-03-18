@@ -1,7 +1,9 @@
+using AdvancedSharpAdbClient;
+using AdvancedSharpAdbClient.Models;
+using AdvancedSharpAdbClient.Receivers;
 using Schaumamal.Models.Platform;
 using Schaumamal.Models.Repository;
 using Schaumamal.ViewModels.Notifications;
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace Schaumamal.Models.Dumper;
@@ -38,17 +40,31 @@ public class Dumper
     {
         progressHandler.ReportStartingDump();
 
-        var adbCheck = await RunAdbAsync("devices", _shortTimeout, ct);
-        if (adbCheck == null) return AdbError("ADB Session Error",
-            "Could not establish ADB connection. Please check that ADB is installed and that the usual commands work.");
+        AdbClient client;
+        IEnumerable<DeviceData> devices;
+        try
+        {
+            var server = new AdbServer();
+            if (!server.GetStatus().IsRunning)
+                server.StartServer("adb", false);
 
-        if (!HasConnectedDevice(adbCheck)) return AdbError("No Device Connected",
+            client = new AdbClient();
+            devices = await client.GetDevicesAsync(ct);
+        }
+        catch
+        {
+            return AdbError("ADB Session Error",
+                "Could not establish ADB connection. Please check that ADB is installed and that the usual commands work.");
+        }
+
+        var device = devices.FirstOrDefault(d => d.State == DeviceState.Online);
+        if (device == null) return AdbError("No Device Connected",
             "Cannot find a device that is reachable through ADB. Connect to a device or start an emulator.", 8);
 
         var timeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var nextNickname = _nicknameProvider.GetNext(lastNickname);
 
-        await RunAdbAsync("root", _shortTimeout, ct);
+        try { await client.RootAsync(device, ct); } catch { /* not all devices support root */ }
         await Task.Delay(500, ct);
 
         var tempDir = Path.Combine(_appDirectoryPath, tempDirectoryName);
@@ -58,30 +74,30 @@ public class Dumper
         progressHandler.ReportPreDumpSetupFinished();
 
         // Dump UI
-        var dumpOut = await RunAdbAsync($"shell uiautomator dump --windows {RemoteDumpFilePath}", _shortTimeout, ct);
+        var dumpOut = await RunShellAsync(client, device, $"uiautomator dump --windows {RemoteDumpFilePath}", _shortTimeout, ct);
         if (dumpOut == null) return AdbError("XML Dump Timeout",
             "The XML dump ran into a timeout. Try executing \"adb shell uiautomator dump\" to debug, or try again.");
 
         // Pull dump file
         var dumpFileName = $"dump_{UniqueIdUtils.Hash()}.xml";
         var localDump = Path.Combine(tempDir, dumpFileName);
-        var pull = await RunAdbAsync($"pull {RemoteDumpFilePath} \"{localDump}\"", _shortTimeout, ct);
-        if (pull == null) return AdbError("Dump File Error", "Could not pull the dump file from the device. Try again.");
+        if (!await PullFileAsync(client, device, RemoteDumpFilePath, localDump, ct))
+            return AdbError("Dump File Error", "Could not pull the dump file from the device. Try again.");
 
-        await RunAdbAsync($"shell rm {RemoteDumpFilePath}", _shortTimeout, ct);
+        await RunShellAsync(client, device, $"rm {RemoteDumpFilePath}", _shortTimeout, ct);
         progressHandler.ReportXmlDumpFinished();
 
         // API level
-        var apiOut = await RunAdbAsync("shell getprop ro.build.version.sdk", _shortTimeout, ct);
+        var apiOut = await RunShellAsync(client, device, "getprop ro.build.version.sdk", _shortTimeout, ct);
         if (apiOut == null || !int.TryParse(apiOut.Trim(), out var api))
             return AdbError("API Level Error", "Could not retrieve device API level.");
 
         // SurfaceFlinger
-        var flingerOut = await RunAdbAsync("shell dumpsys SurfaceFlinger --displays", _shortTimeout, ct);
+        var flingerOut = await RunShellAsync(client, device, "dumpsys SurfaceFlinger --displays", _shortTimeout, ct);
         if (flingerOut == null) return AdbError("SurfaceFlinger Error", "Could not retrieve display IDs. Try again.");
 
         // Display IDs
-        var displaysOut = await RunAdbAsync("shell cmd display get-displays", _shortTimeout, ct);
+        var displaysOut = await RunShellAsync(client, device, "cmd display get-displays", _shortTimeout, ct);
         if (displaysOut == null) return AdbError("Display IDs Error", "Could not retrieve display IDs. Try again.");
 
         var dumpXml = await File.ReadAllTextAsync(localDump, ct);
@@ -97,14 +113,13 @@ public class Dumper
         {
             var scrName = $"scr_{UniqueIdUtils.Hash()}.png";
             var remotePath = RemoteScreenshotFilePath(scrName);
-            var scrResult = await RunAdbAsync($"shell screencap -d {rd.ScreenshotId} {remotePath}", _shortTimeout, ct);
+            var scrResult = await RunShellAsync(client, device, $"screencap -d {rd.ScreenshotId} {remotePath}", _shortTimeout, ct);
             if (scrResult == null) continue;
 
             var localScr = Path.Combine(tempDir, scrName);
-            var pullScr = await RunAdbAsync($"pull {remotePath} \"{localScr}\"", _shortTimeout, ct);
-            if (pullScr == null) continue;
+            if (!await PullFileAsync(client, device, remotePath, localScr, ct)) continue;
 
-            await RunAdbAsync($"shell rm {remotePath}", _shortTimeout, ct);
+            await RunShellAsync(client, device, $"rm {remotePath}", _shortTimeout, ct);
             progressHandler.ReportScreenshotTaken();
             displays.Add(new DisplayInfo(rd.DumpId, scrName));
         }
@@ -158,31 +173,31 @@ public class Dumper
     private static List<T> ExtractAll<T>(string input, Regex pattern, Func<Match, T> transform)
         => pattern.Matches(input).Select(transform).ToList();
 
-    private static bool HasConnectedDevice(string output)
-        => output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Any(l => l.Contains("device") && !l.StartsWith("List"));
-
-    private static async Task<string?> RunAdbAsync(string arguments, TimeSpan timeout, CancellationToken ct)
+    private static async Task<string?> RunShellAsync(AdbClient client, DeviceData device, string command,
+        TimeSpan timeout, CancellationToken ct)
     {
         try
         {
-            using var process = new Process();
-            process.StartInfo = new ProcessStartInfo
-            {
-                FileName = "adb",
-                Arguments = arguments,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            process.Start();
-            var output = await process.StandardOutput.ReadToEndAsync(ct);
             using var tCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             tCts.CancelAfter(timeout);
-            await process.WaitForExitAsync(tCts.Token);
-            return output;
+            var receiver = new ConsoleOutputReceiver();
+            await client.ExecuteRemoteCommandAsync(command, device, receiver, tCts.Token);
+            return receiver.ToString();
         }
         catch { return null; }
+    }
+
+    private static async Task<bool> PullFileAsync(AdbClient client, DeviceData device, string remotePath,
+        string localPath, CancellationToken ct)
+    {
+        try
+        {
+            using var syncService = new SyncService(client, device);
+            using var stream = File.Create(localPath);
+            await syncService.PullAsync(remotePath, stream, null, false, ct);
+            return true;
+        }
+        catch { return false; }
     }
 
     private static DumpResult.Error AdbError(string title, string desc, int timeoutSec = 5) => new(new Notification(
