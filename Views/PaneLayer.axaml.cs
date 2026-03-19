@@ -17,7 +17,9 @@ public partial class PaneLayer : UserControl
     private bool _isVerticalDragging;
     private bool _isHorizontalDragging;
     private Point _lastDragPoint;
-    private TextBlock? _selectedTreeItem;
+    private IReadOnlyList<PaneTreeItem> _treeRoots = Array.Empty<PaneTreeItem>();
+    private bool _isSynchronizingTreeSelection;
+    private int _treeSelectionVersion;
 
     public PaneLayer()
     {
@@ -47,54 +49,136 @@ public partial class PaneLayer : UserControl
         var show = vm.State == InspectorState.Populated;
         TreePlaceholder.IsVisible = !show;
         TreeScroll.IsVisible = show;
-        if (!show) { TreeItems.ItemsSource = null; return; }
+        if (!show)
+        {
+            _treeRoots = Array.Empty<PaneTreeItem>();
+            TreeItems.ItemsSource = null;
+            SetTreeSelection(null);
+            return;
+        }
+
         RebuildTree(vm);
     }
 
     private void RebuildTree(AppViewModel vm)
     {
-        _selectedTreeItem = null;
-        var lines = new List<Control>();
-        BuildFlatTree(vm.SelectedDisplayData.DisplayNode, 0, vm, lines);
-        TreeItems.ItemsSource = lines;
-        if (_selectedTreeItem != null)
-            Dispatcher.UIThread.Post(() => _selectedTreeItem?.BringIntoView(), DispatcherPriority.Loaded);
+        _treeRoots = new[] { BuildTreeItem(vm.SelectedDisplayData.DisplayNode, null) };
+        TreeItems.ItemsSource = _treeRoots;
+        UpdateTreeSelection(vm);
     }
 
-    private void BuildFlatTree(INode node, int depth, AppViewModel vm, List<Control> lines)
+    private static PaneTreeItem BuildTreeItem(INode node, PaneTreeItem? parent)
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        if (depth > 0)
-            panel.Children.Add(new Border { Width = Dimensions.StartPaddingPerDepthLevel * depth });
-
-        var isSelected = node is GenericNode gn && ReferenceEquals(gn, vm.SelectedNode);
-        var tb = new TextBlock
-        {
-            Text = GetNodeDisplayText(node),
-            Foreground = node is GenericNode ? AppColors.PrimaryTextBrush : AppColors.DiscreteTextBrush,
-            Background = isSelected ? AppColors.AccentBrush : Brushes.Transparent,
-            Padding = new Thickness(Dimensions.SmallPadding),
-            Cursor = node is GenericNode ? new Cursor(StandardCursorType.Hand) : null,
-        };
-
-        if (isSelected) _selectedTreeItem = tb;
-
-        if (node is GenericNode clickNode)
-        {
-            tb.PointerPressed += (_, _) => vm.SelectNode(clickNode);
-        }
-
-        panel.Children.Add(tb);
-        lines.Add(panel);
-
-        foreach (var child in node.Children)
-            BuildFlatTree(child, depth + 1, vm, lines);
+        var item = new PaneTreeItem(
+            node,
+            GetNodeDisplayText(node),
+            parent);
+        item.SetChildren(node.Children.Select(child => BuildTreeItem(child, item)).ToArray());
+        return item;
     }
 
     private void UpdateTreeSelection(AppViewModel vm)
     {
         if (vm.State != InspectorState.Populated) return;
-        RebuildTree(vm);
+        var selectedItem = vm.IsNodeSelected && vm.SelectedNode != GenericNode.Empty
+            ? FindTreeItem(vm.SelectedNode, _treeRoots)
+            : null;
+        SetTreeSelection(selectedItem);
+    }
+
+    private PaneTreeItem? FindTreeItem(GenericNode node, IEnumerable<PaneTreeItem> items)
+    {
+        foreach (var item in items)
+        {
+            if (item.Node is GenericNode genericNode && ReferenceEquals(genericNode, node))
+                return item;
+
+            var childMatch = FindTreeItem(node, item.Children);
+            if (childMatch != null)
+                return childMatch;
+        }
+
+        return null;
+    }
+
+    private void SetTreeSelection(PaneTreeItem? item)
+    {
+        var selectionVersion = ++_treeSelectionVersion;
+        if (item == null)
+        {
+            SelectTreeItem(null);
+            return;
+        }
+
+        var treePath = GetTreePath(item);
+        ExpandAndSelectTreeItem(treePath, 0, TreeItems, selectionVersion);
+    }
+
+    private void OnTreeSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_isSynchronizingTreeSelection || DataContext is not AppViewModel vm)
+            return;
+
+        if (TreeItems.SelectedItem is PaneTreeItem { Node: GenericNode node })
+        {
+            vm.SelectNode(node);
+            return;
+        }
+
+        UpdateTreeSelection(vm);
+    }
+
+    private void ExpandAndSelectTreeItem(
+        IReadOnlyList<PaneTreeItem> treePath,
+        int level,
+        ItemsControl parentControl,
+        int selectionVersion)
+    {
+        if (selectionVersion != _treeSelectionVersion)
+            return;
+
+        var targetItem = treePath[level];
+        if (parentControl.ContainerFromItem(targetItem) is not TreeViewItem container)
+        {
+            Dispatcher.UIThread.Post(
+                () => ExpandAndSelectTreeItem(treePath, level, parentControl, selectionVersion),
+                DispatcherPriority.Loaded);
+            return;
+        }
+
+        if (level < treePath.Count - 1)
+        {
+            container.IsExpanded = true;
+            Dispatcher.UIThread.Post(
+                () => ExpandAndSelectTreeItem(treePath, level + 1, container, selectionVersion),
+                DispatcherPriority.Loaded);
+            return;
+        }
+
+        SelectTreeItem(targetItem);
+        container.BringIntoView();
+    }
+
+    private void SelectTreeItem(PaneTreeItem? item)
+    {
+        _isSynchronizingTreeSelection = true;
+        try
+        {
+            TreeItems.SelectedItem = item;
+        }
+        finally
+        {
+            _isSynchronizingTreeSelection = false;
+        }
+    }
+
+    private static IReadOnlyList<PaneTreeItem> GetTreePath(PaneTreeItem item)
+    {
+        var path = new List<PaneTreeItem>();
+        for (var current = item; current != null; current = current.Parent)
+            path.Add(current);
+        path.Reverse();
+        return path;
     }
 
     private static string GetNodeDisplayText(INode node) => node switch
@@ -244,4 +328,15 @@ public partial class PaneLayer : UserControl
         _isHorizontalDragging = false;
         e.Pointer.Capture(null);
     }
+}
+
+internal sealed class PaneTreeItem(INode node, string text, PaneTreeItem? parent)
+{
+    public INode Node { get; } = node;
+    public string Text { get; } = text;
+    public PaneTreeItem? Parent { get; } = parent;
+    public IReadOnlyList<PaneTreeItem> Children { get; private set; } = Array.Empty<PaneTreeItem>();
+    public IBrush Foreground { get; } = node is GenericNode ? AppColors.PrimaryTextBrush : AppColors.DiscreteTextBrush;
+
+    public void SetChildren(IReadOnlyList<PaneTreeItem> children) => Children = children;
 }
